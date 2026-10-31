@@ -1,4 +1,6 @@
 -- Optional: AY-Core creates these tables automatically (ServerConfig.Database.AutoCreateTables).
+-- This file only has the BASE tables. Everything added later (the `data` column, ay_bans, ...) is
+-- applied by AY-Core's migrations on start (tracked in ay_migrations) - do not apply those by hand.
 CREATE TABLE IF NOT EXISTS `ay_players` (
     `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `license` VARCHAR(60) NOT NULL,
