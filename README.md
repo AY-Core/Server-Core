@@ -3,7 +3,7 @@
 Core scripts of **AY-Core**, a custom framework for FiveM focused on a structured, scalable and secure foundation.
 Feature resources (AY-Jobs, AY-Skin, ...) are separate resources that run **on top of** AY-Core.
 
-> Status: under active development (v0.2.0).
+> Status: under active development (v0.3.0).
 
 ## Requirements
 
@@ -36,8 +36,23 @@ set ay_log_webhook "https://discord.com/api/webhooks/..."
 | `/dv [radius]` | admin | Delete your vehicle, or the closest one within `radius` |
 | `/revive [id]` | admin | Revive a player (yourself if no id) |
 | `/kill [id]` | admin | Kill a player (yourself if no id) |
+| `/kick [id] [reason]` | moderator | Kick a player |
+| `/ban [id \| license:xxxx] [duration] [reason]` | admin | Ban a player. Duration: `30m`, `12h`, `7d`, `2w` or `perm`. Offline players by license |
+| `/unban [ban id \| license:xxxx]` | admin | Lift a ban |
+| `/bans` | admin | Show the 10 newest active bans |
+| `/tp [x] [y] [z]` | admin | Teleport to coordinates |
+| `/goto [id]` | admin | Teleport to a player |
+| `/bring [id]` | admin | Teleport a player to you |
 
-Groups and limits are in `ServerConfig.Vehicles` and `ServerConfig.Health` (`config/server.lua`).
+Groups and limits are in `ServerConfig.Vehicles`, `ServerConfig.Health`, `ServerConfig.Bans` and `ServerConfig.Admin` (`config/server.lua`).
+
+### Bans
+
+- Stored in `ay_bans` and mirrored in memory: checking a connecting player costs no database query.
+- A player is blocked when **any** stored identifier matches (`ServerConfig.Bans.MatchIdentifiers`), so a new Rockstar license alone does not evade a ban if the Discord / Steam account is the same. IP addresses are never stored or matched.
+- You cannot ban or kick a player of equal or higher rank.
+- If the ban list cannot be loaded, nobody is let in (fail closed).
+- From code: `AY.Bans.Ban(target, { reason, duration, source }, cb)`, `AY.Bans.Unban(idOrIdentifier)`, `AY.Bans.Check(src)`, `AY.Bans.List()`.
 
 ## Structure
 
@@ -56,9 +71,13 @@ AY-Core/
 │  ├─ modules.lua      # registry of satellite resources
 │  ├─ player.lua       # player loading / saving / objects
 │  ├─ permissions.lua
+│  ├─ bans.lua         # ban system
+│  ├─ notify.lua
 │  ├─ commands.lua
 │  └─ main.lua
-├─ client/main.lua, client/spawn.lua, client/vehicles.lua, client/health.lua
+├─ client/main.lua, notify.lua, spawn.lua, vehicles.lua, health.lua, admin.lua
+├─ tests/bans_spec.lua # offline logic tests:  lua5.4 tests/bans_spec.lua
+├─ .github/workflows/prerelease.yml
 └─ sql/install.sql
 ```
 
@@ -149,7 +168,18 @@ AY.GetPlayers(); AY.GetPlayerByLicense(license)
 AY.Modules.IsLoaded('AY-Jobs'); AY.Modules.List()
 AY.Logger.Info('category', 'message', { extra = 'data' })
 local value = AY.TriggerClientCallback(src, 'name', ...)
+AY.Notify(src, 'Saved!', 'success')   -- kind: info | success | warning | error
 ```
+
+Client: `AY.Notify('Saved!', 'success')`.
+
+## Development workflow
+
+- Work happens on the **`dev`** branch. `main` only contains what you decided to release.
+- Every push to `dev` runs the checks (Lua syntax + `tests/bans_spec.lua`). If they pass, GitHub Actions publishes a **pre-release** named `v<version in fxmanifest.lua>-dev.<N>` (for example `v0.3.0-dev.1`, `v0.3.0-dev.2`). `N` restarts at 1 when the manifest version changes.
+- The attached zip already has the correct `AY-Core/` folder name, and the pre-release version is stamped into its `fxmanifest.lua`.
+- Only the newest 10 `-dev.N` pre-releases are kept. Stable releases are never touched.
+- **Stable releases are made by hand**: bump `version` in `fxmanifest.lua`, update `CHANGELOG.md`, merge `dev` into `main`, then create the release on GitHub (tag `vX.Y.Z`, target `main`).
 
 ## Security notes
 

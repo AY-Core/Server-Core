@@ -5,7 +5,7 @@ lua54 'yes'
 name 'AY-Core'
 author 'Amirali Yavari'
 description 'AY-Core - a structured, scalable and secure core framework for FiveM.'
-version '0.2.0'
+version '0.3.0'
 
 dependency 'oxmysql'
 
@@ -30,13 +30,17 @@ server_scripts {
     'server/modules.lua',
     'server/player.lua',
     'server/permissions.lua',
+    'server/bans.lua',
+    'server/notify.lua',
     'server/commands.lua',
     'server/main.lua',
 }
 
 client_scripts {
     'client/main.lua',
+    'client/notify.lua',
     'client/spawn.lua',
     'client/vehicles.lua',
     'client/health.lua',
+    'client/admin.lua',
 }

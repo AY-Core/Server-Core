@@ -1,0 +1,8 @@
+# Normalize line endings: LF in the repo, always.
+* text=auto eol=lf
+
+# Keep dev-only files out of the packaged resource (git archive).
+.github         export-ignore
+.gitignore      export-ignore
+.gitattributes  export-ignore
+tests           export-ignore
