@@ -41,6 +41,24 @@ local MIGRATIONS_TABLE = [[
 -- AY-Core's own schema changes after v0.1.0 live here.
 local CORE_MIGRATIONS = {
     { id = '001_player_data', sql = 'ALTER TABLE `ay_players` ADD COLUMN `data` LONGTEXT NULL' },
+    {
+        id = '002_bans',
+        sql = [[
+            CREATE TABLE IF NOT EXISTS `ay_bans` (
+                `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                `identifiers` LONGTEXT NOT NULL,
+                `name` VARCHAR(100) NOT NULL DEFAULT '',
+                `reason` VARCHAR(255) NOT NULL,
+                `banned_by` VARCHAR(100) NOT NULL,
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `expires_at` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                `active` TINYINT(1) NOT NULL DEFAULT 1,
+                `unbanned_by` VARCHAR(100) NULL,
+                PRIMARY KEY (`id`),
+                KEY `idx_active` (`active`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ]],
+    },
 }
 
 -- Thin wrappers over oxmysql. Always use placeholders (?) - never concatenate user input into SQL.

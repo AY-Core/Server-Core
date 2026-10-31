@@ -47,3 +47,19 @@ ServerConfig.Health = {
     ReviveGroup = 'admin', -- minimum group for /revive
     KillGroup = 'admin',   -- minimum group for /kill
 }
+
+ServerConfig.Bans = {
+    BanGroup = 'admin',       -- minimum group for /ban, /unban, /bans
+    KickGroup = 'moderator',  -- minimum group for /kick
+    -- A connecting player is blocked if ANY of these identifier kinds matches a stored ban.
+    -- IP addresses are never stored or matched.
+    MatchIdentifiers = { 'license', 'license2', 'steam', 'discord', 'fivem', 'xbl', 'live' },
+    DefaultReason = 'No reason given.',
+    MaxReasonLength = 200,
+    -- Shown to the banned player. Placeholders: {reason} {id} {expires}
+    Message = 'You are banned from this server.\nReason: {reason}\nBan ID: {id}\nExpires: {expires}',
+}
+
+ServerConfig.Admin = {
+    TeleportGroup = 'admin', -- minimum group for /tp, /goto, /bring
+}

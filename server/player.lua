@@ -156,7 +156,7 @@ function AY.GetPlayerByLicense(license)
     end
 end
 
--- Reject connections without a license, and duplicate sessions of the same license.
+-- Reject connections without a license, banned players, and duplicate sessions of the same license.
 AddEventHandler('playerConnecting', function(_, _, deferrals)
     local src = source
     deferrals.defer()
@@ -174,6 +174,24 @@ AddEventHandler('playerConnecting', function(_, _, deferrals)
     if AY.GetPlayerByLicense(license) then
         logConnection(('%s was rejected: account already connected'):format(name))
         deferrals.done('This account is already connected to the server.')
+        return
+    end
+
+    -- Ban check. Right after a restart the ban list may still be loading: wait for it (max 30 s).
+    local waited = 0
+    while not AY.Bans.loaded and waited < 30000 do
+        Wait(250)
+        waited = waited + 250
+    end
+    if not AY.Bans.loaded then
+        deferrals.done('The server is still starting. Please try again in a moment.')
+        return
+    end
+
+    local ban, banMessage = AY.Bans.Check(src)
+    if ban then
+        logConnection(('%s was rejected: banned (ban #%s)'):format(name, tostring(ban.id or '?')))
+        deferrals.done(banMessage)
         return
     end
     deferrals.done()

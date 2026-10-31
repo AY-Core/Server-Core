@@ -86,3 +86,146 @@ AY.RegisterCommand('revive', ServerConfig.Health.ReviveGroup, healthCommand('rev
 
 -- /kill [id]
 AY.RegisterCommand('kill', ServerConfig.Health.KillGroup, healthCommand('kill', 'ay-core:client:kill', 'killed'))
+------------------------------------------------------------------------------
+-- Moderation: /kick /ban /unban /bans
+------------------------------------------------------------------------------
+local function actorName(src)
+    return src == 0 and 'console' or ('%s (id %s)'):format(GetPlayerName(src) or 'unknown', src)
+end
+
+-- /kick [id] [reason]
+AY.RegisterCommand('kick', ServerConfig.Bans.KickGroup, function(src, args)
+    local target = tonumber(args[1])
+    if not target or not GetPlayerName(target) then
+        AY.Reply(src, 'Usage: /kick [id] [reason]  (player must be online)')
+        return
+    end
+    if target == src then
+        AY.Reply(src, 'You cannot kick yourself.')
+        return
+    end
+
+    local targetPlayer = AY.GetPlayer(target)
+    if targetPlayer and not AY.CanTarget(src, targetPlayer) then
+        AY.Reply(src, 'You cannot kick a player of equal or higher rank.')
+        return
+    end
+
+    local reason = AY.Bans.CleanReason(table.concat(args, ' ', 2))
+    local name = GetPlayerName(target)
+    DropPlayer(target, ('You were kicked from the server.\nReason: %s'):format(reason))
+    AY.Logger.Info('moderation', ('%s kicked %s (id %s): %s'):format(actorName(src), name, target, reason))
+    AY.Reply(src, ('Kicked %s.'):format(name))
+end)
+
+-- /ban [id | license:xxxx] [duration] [reason]     duration: 30m, 12h, 7d, 2w, perm
+AY.RegisterCommand('ban', ServerConfig.Bans.BanGroup, function(src, args)
+    local duration = AY.Bans.ParseDuration(args[2])
+    if not args[1] or duration == nil then
+        AY.Reply(src, 'Usage: /ban [id | license:xxxx] [duration: 30m, 12h, 7d, 2w, perm] [reason]')
+        return
+    end
+
+    local target = tonumber(args[1]) or args[1]
+    if target == src then
+        AY.Reply(src, 'You cannot ban yourself.')
+        return
+    end
+
+    AY.Bans.Ban(target, {
+        reason = table.concat(args, ' ', 3),
+        duration = duration,
+        source = src,
+    }, function(ok, result)
+        if ok then
+            AY.Reply(src, ('Banned %s (ban #%s).'):format(result.name ~= '' and result.name or result.identifiers[1], tostring(result.id or '?')))
+        else
+            AY.Reply(src, tostring(result))
+        end
+    end)
+end)
+
+-- /unban [ban id | license:xxxx]
+AY.RegisterCommand('unban', ServerConfig.Bans.BanGroup, function(src, args)
+    local ref = tonumber(args[1]) or args[1]
+    if not ref then
+        AY.Reply(src, 'Usage: /unban [ban id | license:xxxx]')
+        return
+    end
+
+    local count = AY.Bans.Unban(ref, actorName(src))
+    AY.Reply(src, count > 0 and ('Lifted %d ban(s).'):format(count) or 'No active ban found.')
+end)
+
+-- /bans  - the 10 newest active bans
+AY.RegisterCommand('bans', ServerConfig.Bans.BanGroup, function(src)
+    local list = AY.Bans.List()
+    if #list == 0 then
+        AY.Reply(src, 'There are no active bans.')
+        return
+    end
+
+    AY.Reply(src, ('%d active ban(s), showing the newest %d:'):format(#list, math.min(#list, 10)))
+    for i = 1, math.min(#list, 10) do
+        local ban = list[i]
+        local expires = ban.expiresAt and os.date('!%Y-%m-%d %H:%M UTC', ban.expiresAt) or 'permanent'
+        AY.Reply(src, ('#%s  %s  [%s]  %s'):format(tostring(ban.id or '?'), ban.name ~= '' and ban.name or ban.identifiers[1], expires, ban.reason))
+    end
+end)
+
+------------------------------------------------------------------------------
+-- Teleport: /tp /goto /bring   (server-side coordinates need OneSync)
+------------------------------------------------------------------------------
+local function isValidCoord(x, y, z)
+    return type(x) == 'number' and type(y) == 'number' and type(z) == 'number'
+        and x == x and y == y and z == z -- rejects NaN
+        and math.abs(x) <= 10000.0 and math.abs(y) <= 10000.0 and z >= -500.0 and z <= 3000.0
+end
+
+local function pedCoords(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return nil end
+    local coords = GetEntityCoords(ped)
+    if not isValidCoord(coords.x, coords.y, coords.z) then return nil end
+    return coords
+end
+
+-- /tp [x] [y] [z]
+AY.RegisterCommand('tp', ServerConfig.Admin.TeleportGroup, function(src, args)
+    if src == 0 then
+        consoleReply(src, 'This command can only be used in-game.')
+        return
+    end
+    if not AY.Security.CheckRate(src, 'cmd:tp', { Window = 3000, Max = 5 }) then return end
+
+    local x, y, z = tonumber(args[1]), tonumber(args[2]), tonumber(args[3])
+    if not isValidCoord(x, y, z) then return end
+
+    TriggerClientEvent('ay-core:client:teleport', src, x + 0.0, y + 0.0, z + 0.0)
+    AY.Logger.Info('admin', ('%s used /tp to %.1f, %.1f, %.1f'):format(actorName(src), x, y, z))
+end)
+
+-- /goto [id]  - teleport to a player.   /bring [id]  - teleport a player to you.
+local function playerTeleportCommand(name, bring)
+    return function(src, args)
+        if src == 0 then
+            consoleReply(src, 'This command can only be used in-game.')
+            return
+        end
+        if not AY.Security.CheckRate(src, 'cmd:' .. name, { Window = 3000, Max = 5 }) then return end
+
+        local target = tonumber(args[1])
+        if not target or target == src or not AY.GetPlayer(target) then return end
+
+        -- Whoever moves, the destination is the other player's current position.
+        local destination = pedCoords(bring and src or target)
+        if not destination then return end
+
+        local mover = bring and target or src
+        TriggerClientEvent('ay-core:client:teleport', mover, destination.x + 1.0, destination.y, destination.z)
+        AY.Logger.Info('admin', ('%s used /%s on %s (id %s)'):format(actorName(src), name, GetPlayerName(target) or 'unknown', target))
+    end
+end
+
+AY.RegisterCommand('goto', ServerConfig.Admin.TeleportGroup, playerTeleportCommand('goto', false))
+AY.RegisterCommand('bring', ServerConfig.Admin.TeleportGroup, playerTeleportCommand('bring', true))
